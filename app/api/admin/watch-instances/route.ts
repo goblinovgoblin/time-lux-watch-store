@@ -34,3 +34,42 @@ export async function GET() {
 
   return NextResponse.json(result.rows)
 }
+
+export async function POST(request: Request) {
+  const auth = await requireAdmin()
+
+  if ('error' in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status })
+  }
+
+  const body = await request.json()
+  const modelId = body.model_id
+  const storeId = body.store_id
+  const serialNumber = typeof body.serial_number === 'string' ? body.serial_number.trim() : ''
+  const price = Number(body.price)
+  const status = typeof body.status === 'string' ? body.status.trim().toUpperCase() : ''
+
+  if (!modelId || !storeId || !serialNumber || !Number.isFinite(price) || price < 0 || !['AVAILABLE', 'RESERVED', 'SOLD'].includes(status)) {
+    return NextResponse.json(
+      { error: 'Required watch instance fields are missing' },
+      { status: 400 }
+    )
+  }
+
+  const result = await query(
+    `
+      INSERT INTO watch_instances (
+        model_id,
+        store_id,
+        serial_number,
+        price,
+        status
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING instance_id, model_id, store_id, serial_number, price, status, removed
+    `,
+    [modelId, storeId, serialNumber, price, status]
+  )
+
+  return NextResponse.json(result.rows[0], { status: 201 })
+}

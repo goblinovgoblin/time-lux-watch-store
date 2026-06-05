@@ -117,6 +117,23 @@ type SimpleForm = {
   city: string
 }
 
+type WatchModelForm = {
+  brand_id: string
+  category_id: string
+  mechanism_id: string
+  model_name: string
+  reference_code: string
+  image_url: string
+}
+
+type WatchInstanceForm = {
+  model_id: string
+  store_id: string
+  serial_number: string
+  price: string
+  status: string
+}
+
 type SimpleResourceConfig = {
   endpoint: string
   idKey: string
@@ -184,6 +201,25 @@ const emptySimpleForm: SimpleForm = {
   name: '',
   city: '',
 }
+
+const emptyWatchModelForm: WatchModelForm = {
+  brand_id: '',
+  category_id: '',
+  mechanism_id: '',
+  model_name: '',
+  reference_code: '',
+  image_url: '',
+}
+
+const emptyWatchInstanceForm: WatchInstanceForm = {
+  model_id: '',
+  store_id: '',
+  serial_number: '',
+  price: '',
+  status: 'AVAILABLE',
+}
+
+const watchStatuses = ['AVAILABLE', 'RESERVED', 'SOLD']
 
 async function fetchAdminResource<T>(path: string): Promise<T[]> {
   const response = await fetch(path, {
@@ -266,7 +302,10 @@ export function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [form, setForm] = useState<SimpleForm>(emptySimpleForm)
+  const [watchModelForm, setWatchModelForm] = useState<WatchModelForm>(emptyWatchModelForm)
+  const [watchInstanceForm, setWatchInstanceForm] = useState<WatchInstanceForm>(emptyWatchInstanceForm)
   const [editingId, setEditingId] = useState<string | number | null>(null)
+  const [isWatchFormOpen, setIsWatchFormOpen] = useState(false)
   const [actionError, setActionError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -321,7 +360,10 @@ export function AdminDashboard() {
 
   useEffect(() => {
     setForm(emptySimpleForm)
+    setWatchModelForm(emptyWatchModelForm)
+    setWatchInstanceForm(emptyWatchInstanceForm)
     setEditingId(null)
+    setIsWatchFormOpen(false)
     setActionError('')
   }, [activeTab])
 
@@ -425,7 +467,196 @@ export function AdminDashboard() {
     }
   }
 
+  const openCreateWatchForm = () => {
+    setEditingId(null)
+    setActionError('')
+    setIsWatchFormOpen(true)
+
+    if (activeTab === 'watchModels') {
+      setWatchModelForm(emptyWatchModelForm)
+    }
+
+    if (activeTab === 'watchInstances') {
+      setWatchInstanceForm(emptyWatchInstanceForm)
+    }
+  }
+
+  const closeWatchForm = () => {
+    setEditingId(null)
+    setActionError('')
+    setIsWatchFormOpen(false)
+    setWatchModelForm(emptyWatchModelForm)
+    setWatchInstanceForm(emptyWatchInstanceForm)
+  }
+
+  const handleWatchModelSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const body = {
+      brand_id: watchModelForm.brand_id,
+      category_id: watchModelForm.category_id,
+      mechanism_id: watchModelForm.mechanism_id,
+      model_name: watchModelForm.model_name.trim(),
+      reference_code: watchModelForm.reference_code.trim(),
+      image_url: watchModelForm.image_url.trim(),
+    }
+
+    if (!body.brand_id || !body.category_id || !body.mechanism_id || !body.model_name || !body.reference_code) {
+      setActionError('Заполните обязательные поля')
+      return
+    }
+
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      await mutateAdminResource(
+        editingId ? `/api/admin/watch-models/${editingId}` : '/api/admin/watch-models',
+        {
+          method: editingId ? 'PATCH' : 'POST',
+          body: JSON.stringify(body),
+        }
+      )
+      closeWatchForm()
+      await loadAdminData()
+    } catch (saveError) {
+      setActionError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить модель часов')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const startEditWatchModel = (row: AdminWatchModel) => {
+    setEditingId(row.model_id)
+    setWatchModelForm({
+      brand_id: String(row.brand_id),
+      category_id: String(row.category_id),
+      mechanism_id: String(row.mechanism_id),
+      model_name: row.model_name,
+      reference_code: row.reference_code,
+      image_url: row.image_url ?? '',
+    })
+    setActionError('')
+    setIsWatchFormOpen(true)
+  }
+
+  const handleDeleteWatchModel = async (id: string | number) => {
+    const confirmed = window.confirm('Пометить модель часов как удаленную?')
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      await mutateAdminResource(`/api/admin/watch-models/${id}`, {
+        method: 'DELETE',
+      })
+      await loadAdminData()
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить модель часов')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleWatchInstanceSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const body = {
+      model_id: watchInstanceForm.model_id,
+      store_id: watchInstanceForm.store_id,
+      serial_number: watchInstanceForm.serial_number.trim(),
+      price: watchInstanceForm.price,
+      status: watchInstanceForm.status,
+    }
+
+    if (!body.model_id || !body.store_id || !body.serial_number || !body.price || !watchStatuses.includes(body.status)) {
+      setActionError('Заполните обязательные поля')
+      return
+    }
+
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      await mutateAdminResource(
+        editingId ? `/api/admin/watch-instances/${editingId}` : '/api/admin/watch-instances',
+        {
+          method: editingId ? 'PATCH' : 'POST',
+          body: JSON.stringify(body),
+        }
+      )
+      closeWatchForm()
+      await loadAdminData()
+    } catch (saveError) {
+      setActionError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить экземпляр часов')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const startEditWatchInstance = (row: AdminWatchInstance) => {
+    setEditingId(row.instance_id)
+    setWatchInstanceForm({
+      model_id: String(row.model_id),
+      store_id: String(row.store_id),
+      serial_number: row.serial_number,
+      price: String(row.price),
+      status: row.status,
+    })
+    setActionError('')
+    setIsWatchFormOpen(true)
+  }
+
+  const handleDeleteWatchInstance = async (id: string | number) => {
+    const confirmed = window.confirm('Пометить экземпляр часов как удаленный?')
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      await mutateAdminResource(`/api/admin/watch-instances/${id}`, {
+        method: 'DELETE',
+      })
+      await loadAdminData()
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить экземпляр часов')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDeleteOrder = async (id: string | number) => {
+    const confirmed = window.confirm('Пометить заказ как удаленный?')
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      await mutateAdminResource(`/api/admin/orders/${id}`, {
+        method: 'DELETE',
+      })
+      await loadAdminData()
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить заказ')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const simpleConfig = isSimpleTab(activeTab) ? simpleResourceConfigs[activeTab] : null
+  const isWatchResourceTab = activeTab === 'watchModels' || activeTab === 'watchInstances'
 
   return (
     <div className="space-y-6">
@@ -513,6 +744,161 @@ export function AdminDashboard() {
         </form>
       )}
 
+      {activeTab === 'watchModels' && (
+        <div className="rounded-lg border border-border/50 p-4 space-y-4">
+          {!isWatchFormOpen ? (
+            <Button type="button" onClick={openCreateWatchForm}>
+              Создать
+            </Button>
+          ) : (
+            <form onSubmit={handleWatchModelSubmit} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <select
+                  value={watchModelForm.brand_id}
+                  onChange={event => setWatchModelForm(prev => ({ ...prev, brand_id: event.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Бренд</option>
+                  {data.brands.map(brand => (
+                    <option key={String(brand.brand_id)} value={String(brand.brand_id)}>
+                      {brand.brand_name}{brand.removed ? ' (Удалено)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={watchModelForm.category_id}
+                  onChange={event => setWatchModelForm(prev => ({ ...prev, category_id: event.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Категория</option>
+                  {data.categories.map(category => (
+                    <option key={String(category.category_id)} value={String(category.category_id)}>
+                      {category.category_name}{category.removed ? ' (Удалено)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={watchModelForm.mechanism_id}
+                  onChange={event => setWatchModelForm(prev => ({ ...prev, mechanism_id: event.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Механизм</option>
+                  {data.mechanisms.map(mechanism => (
+                    <option key={String(mechanism.mechanism_id)} value={String(mechanism.mechanism_id)}>
+                      {mechanism.mechanism_name}{mechanism.removed ? ' (Удалено)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  placeholder="Название модели"
+                  value={watchModelForm.model_name}
+                  onChange={event => setWatchModelForm(prev => ({ ...prev, model_name: event.target.value }))}
+                />
+                <Input
+                  placeholder="Reference code"
+                  value={watchModelForm.reference_code}
+                  onChange={event => setWatchModelForm(prev => ({ ...prev, reference_code: event.target.value }))}
+                />
+                <Input
+                  placeholder="Image URL"
+                  value={watchModelForm.image_url}
+                  onChange={event => setWatchModelForm(prev => ({ ...prev, image_url: event.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={isSaving}>
+                  {editingId ? 'Сохранить' : 'Создать'}
+                </Button>
+                <Button type="button" variant="outline" onClick={closeWatchForm}>
+                  Отмена
+                </Button>
+              </div>
+              {actionError && (
+                <p className="text-sm text-destructive">{actionError}</p>
+              )}
+            </form>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'watchInstances' && (
+        <div className="rounded-lg border border-border/50 p-4 space-y-4">
+          {!isWatchFormOpen ? (
+            <Button type="button" onClick={openCreateWatchForm}>
+              Создать
+            </Button>
+          ) : (
+            <form onSubmit={handleWatchInstanceSubmit} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <select
+                  value={watchInstanceForm.model_id}
+                  onChange={event => setWatchInstanceForm(prev => ({ ...prev, model_id: event.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Модель</option>
+                  {data.watchModels.map(model => (
+                    <option key={String(model.model_id)} value={String(model.model_id)}>
+                      {model.brand_name} {model.model_name} / {model.reference_code}{model.removed ? ' (Удалено)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={watchInstanceForm.store_id}
+                  onChange={event => setWatchInstanceForm(prev => ({ ...prev, store_id: event.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Магазин</option>
+                  {data.stores.map(store => (
+                    <option key={String(store.store_id)} value={String(store.store_id)}>
+                      {store.store_name}, {store.city}{store.removed ? ' (Удалено)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={watchInstanceForm.status}
+                  onChange={event => setWatchInstanceForm(prev => ({ ...prev, status: event.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  {watchStatuses.map(status => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+                <Input
+                  placeholder="Serial number"
+                  value={watchInstanceForm.serial_number}
+                  onChange={event => setWatchInstanceForm(prev => ({ ...prev, serial_number: event.target.value }))}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Цена"
+                  value={watchInstanceForm.price}
+                  onChange={event => setWatchInstanceForm(prev => ({ ...prev, price: event.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={isSaving}>
+                  {editingId ? 'Сохранить' : 'Создать'}
+                </Button>
+                <Button type="button" variant="outline" onClick={closeWatchForm}>
+                  Отмена
+                </Button>
+              </div>
+              {actionError && (
+                <p className="text-sm text-destructive">{actionError}</p>
+              )}
+            </form>
+          )}
+        </div>
+      )}
+
+      {!simpleConfig && (!isWatchResourceTab || !isWatchFormOpen) && actionError && (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {actionError}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -561,9 +947,29 @@ export function AdminDashboard() {
               disabled={isSaving}
             />
           )}
-          {activeTab === 'watchModels' && <WatchModelsTable rows={filteredData.watchModels} />}
-          {activeTab === 'watchInstances' && <WatchInstancesTable rows={filteredData.watchInstances} />}
-          {activeTab === 'orders' && <OrdersTable rows={filteredData.orders} />}
+          {activeTab === 'watchModels' && (
+            <WatchModelsTable
+              rows={filteredData.watchModels}
+              onEdit={startEditWatchModel}
+              onDelete={handleDeleteWatchModel}
+              disabled={isSaving}
+            />
+          )}
+          {activeTab === 'watchInstances' && (
+            <WatchInstancesTable
+              rows={filteredData.watchInstances}
+              onEdit={startEditWatchInstance}
+              onDelete={handleDeleteWatchInstance}
+              disabled={isSaving}
+            />
+          )}
+          {activeTab === 'orders' && (
+            <OrdersTable
+              rows={filteredData.orders}
+              onDelete={handleDeleteOrder}
+              disabled={isSaving}
+            />
+          )}
         </div>
       )}
     </div>
@@ -726,7 +1132,17 @@ function RowActions({
   )
 }
 
-function WatchModelsTable({ rows }: { rows: AdminWatchModel[] }) {
+function WatchModelsTable({
+  rows,
+  onEdit,
+  onDelete,
+  disabled,
+}: {
+  rows: AdminWatchModel[]
+  onEdit: (row: AdminWatchModel) => void
+  onDelete: (id: string | number) => void
+  disabled: boolean
+}) {
   return (
     <Table>
       <TableHeader>
@@ -739,10 +1155,11 @@ function WatchModelsTable({ rows }: { rows: AdminWatchModel[] }) {
           <TableHead>Механизм</TableHead>
           <TableHead>Изображение</TableHead>
           <TableHead className="text-center">Статус</TableHead>
+          <TableHead className="text-right">Действия</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length === 0 ? <EmptyRow colSpan={8} /> : rows.map(row => (
+        {rows.length === 0 ? <EmptyRow colSpan={9} /> : rows.map(row => (
           <TableRow key={String(row.model_id)}>
             <TableCell className="font-mono text-xs">{row.model_id}</TableCell>
             <TableCell>{row.brand_name}</TableCell>
@@ -752,6 +1169,15 @@ function WatchModelsTable({ rows }: { rows: AdminWatchModel[] }) {
             <TableCell>{row.mechanism_name}</TableCell>
             <TableCell className="max-w-[180px] truncate">{row.image_url || '-'}</TableCell>
             <TableCell className="text-center">{getRemovedBadge(row.removed)}</TableCell>
+            <TableCell className="text-right">
+              <RowActions
+                id={row.model_id}
+                removed={row.removed}
+                disabled={disabled}
+                onEdit={() => onEdit(row)}
+                onDelete={onDelete}
+              />
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -759,7 +1185,17 @@ function WatchModelsTable({ rows }: { rows: AdminWatchModel[] }) {
   )
 }
 
-function WatchInstancesTable({ rows }: { rows: AdminWatchInstance[] }) {
+function WatchInstancesTable({
+  rows,
+  onEdit,
+  onDelete,
+  disabled,
+}: {
+  rows: AdminWatchInstance[]
+  onEdit: (row: AdminWatchInstance) => void
+  onDelete: (id: string | number) => void
+  disabled: boolean
+}) {
   return (
     <Table>
       <TableHeader>
@@ -773,10 +1209,11 @@ function WatchInstancesTable({ rows }: { rows: AdminWatchInstance[] }) {
           <TableHead className="text-right">Цена</TableHead>
           <TableHead>Статус</TableHead>
           <TableHead className="text-center">Запись</TableHead>
+          <TableHead className="text-right">Действия</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length === 0 ? <EmptyRow colSpan={9} /> : rows.map(row => (
+        {rows.length === 0 ? <EmptyRow colSpan={10} /> : rows.map(row => (
           <TableRow key={String(row.instance_id)}>
             <TableCell className="font-mono text-xs">{row.instance_id}</TableCell>
             <TableCell className="font-medium">{row.brand_name} {row.model_name}</TableCell>
@@ -787,6 +1224,15 @@ function WatchInstancesTable({ rows }: { rows: AdminWatchInstance[] }) {
             <TableCell className="text-right">{formatPrice(Number(row.price))}</TableCell>
             <TableCell>{row.status}</TableCell>
             <TableCell className="text-center">{getRemovedBadge(row.removed)}</TableCell>
+            <TableCell className="text-right">
+              <RowActions
+                id={row.instance_id}
+                removed={row.removed}
+                disabled={disabled}
+                onEdit={() => onEdit(row)}
+                onDelete={onDelete}
+              />
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -794,7 +1240,15 @@ function WatchInstancesTable({ rows }: { rows: AdminWatchInstance[] }) {
   )
 }
 
-function OrdersTable({ rows }: { rows: AdminOrder[] }) {
+function OrdersTable({
+  rows,
+  onDelete,
+  disabled,
+}: {
+  rows: AdminOrder[]
+  onDelete: (id: string | number) => void
+  disabled: boolean
+}) {
   return (
     <Table>
       <TableHeader>
@@ -806,10 +1260,11 @@ function OrdersTable({ rows }: { rows: AdminOrder[] }) {
           <TableHead>Статус</TableHead>
           <TableHead className="text-right">Сумма</TableHead>
           <TableHead className="text-center">Запись</TableHead>
+          <TableHead className="text-right">Действия</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length === 0 ? <EmptyRow colSpan={7} /> : rows.map(row => (
+        {rows.length === 0 ? <EmptyRow colSpan={8} /> : rows.map(row => (
           <TableRow key={String(row.order_id)}>
             <TableCell className="font-mono text-xs">{row.order_id}</TableCell>
             <TableCell className="font-medium">{row.customer_name}</TableCell>
@@ -818,6 +1273,16 @@ function OrdersTable({ rows }: { rows: AdminOrder[] }) {
             <TableCell>{row.status}</TableCell>
             <TableCell className="text-right">{formatPrice(Number(row.total_amount))}</TableCell>
             <TableCell className="text-center">{getRemovedBadge(row.removed)}</TableCell>
+            <TableCell className="text-right">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => onDelete(row.order_id)}
+                disabled={disabled || row.removed}
+              >
+                Удалить
+              </Button>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -33,3 +33,44 @@ export async function GET() {
 
   return NextResponse.json(result.rows)
 }
+
+export async function POST(request: Request) {
+  const auth = await requireAdmin()
+
+  if ('error' in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status })
+  }
+
+  const body = await request.json()
+  const brandId = body.brand_id
+  const categoryId = body.category_id
+  const mechanismId = body.mechanism_id
+  const modelName = typeof body.model_name === 'string' ? body.model_name.trim() : ''
+  const referenceCode = typeof body.reference_code === 'string' ? body.reference_code.trim() : ''
+  const imageUrl = typeof body.image_url === 'string' ? body.image_url.trim() : ''
+
+  if (!brandId || !categoryId || !mechanismId || !modelName || !referenceCode) {
+    return NextResponse.json(
+      { error: 'Required watch model fields are missing' },
+      { status: 400 }
+    )
+  }
+
+  const result = await query(
+    `
+      INSERT INTO watch_models (
+        brand_id,
+        category_id,
+        mechanism_id,
+        model_name,
+        reference_code,
+        image_url
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING model_id, brand_id, category_id, mechanism_id, model_name, reference_code, image_url, removed
+    `,
+    [brandId, categoryId, mechanismId, modelName, referenceCode, imageUrl || null]
+  )
+
+  return NextResponse.json(result.rows[0], { status: 201 })
+}
