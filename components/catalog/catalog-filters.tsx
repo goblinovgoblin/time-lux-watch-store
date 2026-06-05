@@ -41,7 +41,7 @@ export function CatalogFilters({
 
       <div className="space-y-3">
         <Label>Бренд</Label>
-        <Select value={brand} onValueChange={setBrand}>
+        <Select value={brand || 'all'} onValueChange={value => setBrand(value === 'all' ? '' : value)}>
           <SelectTrigger>
             <SelectValue placeholder="Все бренды" />
           </SelectTrigger>
@@ -56,7 +56,7 @@ export function CatalogFilters({
 
       <div className="space-y-3">
         <Label>Категория</Label>
-        <Select value={category} onValueChange={setCategory}>
+        <Select value={category || 'all'} onValueChange={value => setCategory(value === 'all' ? '' : value)}>
           <SelectTrigger>
             <SelectValue placeholder="Все категории" />
           </SelectTrigger>
@@ -71,7 +71,7 @@ export function CatalogFilters({
 
       <div className="space-y-3">
         <Label>Пол</Label>
-        <Select value={gender} onValueChange={setGender}>
+        <Select value={gender || 'all'} onValueChange={value => setGender(value === 'all' ? '' : value)}>
           <SelectTrigger>
             <SelectValue placeholder="Все" />
           </SelectTrigger>
@@ -86,7 +86,7 @@ export function CatalogFilters({
 
       <div className="space-y-3">
         <Label>Механизм</Label>
-        <Select value={mechanism} onValueChange={setMechanism}>
+        <Select value={mechanism || 'all'} onValueChange={value => setMechanism(value === 'all' ? '' : value)}>
           <SelectTrigger>
             <SelectValue placeholder="Все типы" />
           </SelectTrigger>

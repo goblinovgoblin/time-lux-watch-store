@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useWatches } from '@/lib/watch-context'
+import type { CatalogWatch } from '@/lib/api'
+import { getCatalog, mockCatalogWatches } from '@/lib/api'
 import { WatchCard } from '@/components/watch-card'
 import { CatalogFilters } from './catalog-filters'
 import { Button } from '@/components/ui/button'
@@ -17,66 +18,102 @@ import {
 import { Search, SlidersHorizontal, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 
+function sortWatches(watches: CatalogWatch[], sortBy: string) {
+  const result = [...watches]
+
+  switch (sortBy) {
+    case 'price-asc':
+      result.sort((a, b) => Number(a.price) - Number(b.price))
+      break
+    case 'price-desc':
+      result.sort((a, b) => Number(b.price) - Number(a.price))
+      break
+    case 'name':
+      result.sort((a, b) => a.model_name.localeCompare(b.model_name))
+      break
+    case 'newest':
+    default:
+      break
+  }
+
+  return result
+}
+
+function filterMockWatches(watches: CatalogWatch[], search: string) {
+  if (!search) {
+    return watches
+  }
+
+  const searchLower = search.toLowerCase()
+  return watches.filter(
+    watch =>
+      watch.model_name.toLowerCase().includes(searchLower) ||
+      watch.brand_name.toLowerCase().includes(searchLower) ||
+      watch.reference_code.toLowerCase().includes(searchLower)
+  )
+}
+
 export function CatalogContent() {
-  const { watches } = useWatches()
   const searchParams = useSearchParams()
-  
+
   const [search, setSearch] = useState(searchParams.get('search') || '')
-  const [brand, setBrand] = useState(searchParams.get('brand') || '')
-  const [category, setCategory] = useState(searchParams.get('category') || '')
+  const [brand, setBrand] = useState(searchParams.get('brandId') || searchParams.get('brand') || '')
+  const [category, setCategory] = useState(searchParams.get('categoryId') || searchParams.get('category') || '')
   const [gender, setGender] = useState(searchParams.get('gender') || '')
-  const [mechanism, setMechanism] = useState(searchParams.get('mechanism') || '')
+  const [mechanism, setMechanism] = useState(searchParams.get('mechanismId') || searchParams.get('mechanism') || '')
   const [sortBy, setSortBy] = useState<string>('newest')
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [watches, setWatches] = useState<CatalogWatch[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const filteredWatches = useMemo(() => {
-    let result = [...watches]
+  const city = searchParams.get('city')
+  const minPrice = searchParams.get('minPrice')
+  const maxPrice = searchParams.get('maxPrice')
+  const availableOnly = searchParams.get('availableOnly') !== 'false'
 
-    if (search) {
-      const searchLower = search.toLowerCase()
-      result = result.filter(
-        w =>
-          w.name.toLowerCase().includes(searchLower) ||
-          w.brand.toLowerCase().includes(searchLower) ||
-          w.description.toLowerCase().includes(searchLower)
-      )
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCatalog() {
+      setIsLoading(true)
+      setError('')
+
+      try {
+        const catalog = await getCatalog({
+          search,
+          brandId: brand,
+          categoryId: category,
+          mechanismId: mechanism,
+          city,
+          minPrice,
+          maxPrice,
+          availableOnly,
+        })
+
+        if (isMounted) {
+          setWatches(catalog)
+        }
+      } catch {
+        if (isMounted) {
+          setWatches(filterMockWatches(mockCatalogWatches, search))
+          setError('Не удалось загрузить каталог из базы. Показаны демо-данные.')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
     }
 
-    if (brand) {
-      result = result.filter(w => w.brand === brand)
+    loadCatalog()
+
+    return () => {
+      isMounted = false
     }
+  }, [search, brand, category, mechanism, city, minPrice, maxPrice, availableOnly])
 
-    if (category) {
-      result = result.filter(w => w.category === category)
-    }
-
-    if (gender) {
-      result = result.filter(w => w.gender === gender)
-    }
-
-    if (mechanism) {
-      result = result.filter(w => w.mechanism === mechanism)
-    }
-
-    switch (sortBy) {
-      case 'price-asc':
-        result.sort((a, b) => a.price - b.price)
-        break
-      case 'price-desc':
-        result.sort((a, b) => b.price - a.price)
-        break
-      case 'name':
-        result.sort((a, b) => a.name.localeCompare(b.name))
-        break
-      case 'newest':
-      default:
-        result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        break
-    }
-
-    return result
-  }, [watches, search, brand, category, gender, mechanism, sortBy])
-
+  const sortedWatches = useMemo(() => sortWatches(watches, sortBy), [watches, sortBy])
   const activeFiltersCount = [brand, category, gender, mechanism].filter(Boolean).length
 
   const clearFilters = () => {
@@ -100,14 +137,11 @@ export function CatalogContent() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
-      {/* Desktop Sidebar Filters */}
       <aside className="hidden lg:block w-64 shrink-0">
         <CatalogFilters {...filterProps} />
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1">
-        {/* Search and Sort Bar */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -120,7 +154,6 @@ export function CatalogContent() {
           </div>
 
           <div className="flex gap-2">
-            {/* Mobile Filters Button */}
             <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
               <SheetTrigger asChild>
                 <Button variant="outline" className="lg:hidden gap-2">
@@ -155,7 +188,6 @@ export function CatalogContent() {
           </div>
         </div>
 
-        {/* Active Filters */}
         {(search || activeFiltersCount > 0) && (
           <div className="flex flex-wrap items-center gap-2 mb-6">
             <span className="text-sm text-muted-foreground">Активные фильтры:</span>
@@ -195,16 +227,24 @@ export function CatalogContent() {
           </div>
         )}
 
-        {/* Results Count */}
+        {error && (
+          <div className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
         <p className="text-sm text-muted-foreground mb-6">
-          Найдено: {filteredWatches.length} {filteredWatches.length === 1 ? 'модель' : 'моделей'}
+          Найдено: {sortedWatches.length} {sortedWatches.length === 1 ? 'модель' : 'моделей'}
         </p>
 
-        {/* Watch Grid */}
-        {filteredWatches.length > 0 ? (
+        {isLoading ? (
+          <div className="text-center py-16">
+            <p className="text-muted-foreground">Загрузка...</p>
+          </div>
+        ) : sortedWatches.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredWatches.map(watch => (
-              <WatchCard key={watch.id} watch={watch} />
+            {sortedWatches.map(watch => (
+              <WatchCard key={watch.instance_id} watch={watch} />
             ))}
           </div>
         ) : (
