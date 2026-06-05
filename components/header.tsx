@@ -56,12 +56,17 @@ export function Header() {
               </Button>
             </>
           ) : (
-            <Link href="/login">
-              <Button variant="outline" size="sm" className="gap-2">
-                <User className="h-4 w-4" />
-                Войти
-              </Button>
-            </Link>
+            <>
+              <Link href="/register" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                Регистрация
+              </Link>
+              <Link href="/login">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <User className="h-4 w-4" />
+                  Войти
+                </Button>
+              </Link>
+            </>
           )}
         </div>
 
@@ -101,12 +106,19 @@ export function Header() {
                     </Button>
                   </>
                 ) : (
-                  <Link href="/login" onClick={() => setOpen(false)}>
-                    <Button variant="outline" className="w-full gap-2">
-                      <User className="h-4 w-4" />
-                      Войти
-                    </Button>
-                  </Link>
+                  <div className="space-y-2">
+                    <Link href="/register" onClick={() => setOpen(false)}>
+                      <Button variant="ghost" className="w-full">
+                        Регистрация
+                      </Button>
+                    </Link>
+                    <Link href="/login" onClick={() => setOpen(false)}>
+                      <Button variant="outline" className="w-full gap-2">
+                        <User className="h-4 w-4" />
+                        Войти
+                      </Button>
+                    </Link>
+                  </div>
                 )}
               </div>
             </nav>

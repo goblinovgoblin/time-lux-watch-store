@@ -96,7 +96,13 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-6 space-y-3 text-center">
+              <p className="text-sm text-muted-foreground">
+                Нет аккаунта?{' '}
+                <Link href="/register" className="font-medium text-foreground transition-colors hover:text-primary">
+                  Зарегистрироваться
+                </Link>
+              </p>
               <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Вернуться на главную
               </Link>

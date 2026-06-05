@@ -7,6 +7,7 @@ type AuthUserRow = {
   full_name: string
   email: string
   role_name: string
+  password_hash: string | null
 }
 
 const demoPasswords: Record<string, string> = {
@@ -34,19 +35,13 @@ export async function POST(request: Request) {
       )
     }
 
-    if (demoPasswords[email] !== password) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      )
-    }
-
     const result = await query<AuthUserRow>(
       `
         SELECT
           u.user_id,
           u.full_name,
           u.email,
+          u.password_hash,
           r.role_name
         FROM users u
         JOIN roles r ON r.role_id = u.role_id
@@ -61,6 +56,18 @@ export async function POST(request: Request) {
     const user = result.rows[0]
 
     if (!user) {
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      )
+    }
+
+    const expectedDemoPassword = demoPasswords[email]
+    const isPasswordValid = expectedDemoPassword
+      ? password === expectedDemoPassword
+      : password === user.password_hash
+
+    if (!isPasswordValid) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }

@@ -14,11 +14,19 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null
   login: (email: string, password: string) => Promise<boolean>
+  register: (credentials: RegisterCredentials) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   isLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+type RegisterCredentials = {
+  fullName: string
+  email: string
+  password: string
+  confirmPassword: string
+}
 
 function normalizeRoleName(roleName: string): RoleName {
   return roleName.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'CUSTOMER'
@@ -129,6 +137,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const register = async (credentials: RegisterCredentials) => {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(credentials),
+      })
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        return {
+          success: false,
+          error: result?.error || 'Не удалось зарегистрироваться',
+        }
+      }
+
+      const registeredUser = await response.json()
+      setUser(normalizeUser(registeredUser))
+      return { success: true }
+    } catch {
+      return {
+        success: false,
+        error: 'Не удалось зарегистрироваться',
+      }
+    }
+  }
+
   const logout = async () => {
     try {
       await fetch('/api/auth/logout', {
@@ -141,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   )
