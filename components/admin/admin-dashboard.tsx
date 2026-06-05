@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -110,6 +110,21 @@ type AdminData = {
   orders: AdminOrder[]
 }
 
+type SimpleTab = 'stores' | 'brands' | 'categories' | 'mechanisms'
+
+type SimpleForm = {
+  name: string
+  city: string
+}
+
+type SimpleResourceConfig = {
+  endpoint: string
+  idKey: string
+  nameKey: string
+  nameLabel: string
+  hasCity?: boolean
+}
+
 type TabConfig = {
   id: AdminTab
   label: string
@@ -126,6 +141,34 @@ const tabs: TabConfig[] = [
   { id: 'orders', label: 'Заказы' },
 ]
 
+const simpleResourceConfigs: Record<SimpleTab, SimpleResourceConfig> = {
+  stores: {
+    endpoint: '/api/admin/stores',
+    idKey: 'store_id',
+    nameKey: 'store_name',
+    nameLabel: 'Магазин',
+    hasCity: true,
+  },
+  brands: {
+    endpoint: '/api/admin/brands',
+    idKey: 'brand_id',
+    nameKey: 'brand_name',
+    nameLabel: 'Бренд',
+  },
+  categories: {
+    endpoint: '/api/admin/categories',
+    idKey: 'category_id',
+    nameKey: 'category_name',
+    nameLabel: 'Категория',
+  },
+  mechanisms: {
+    endpoint: '/api/admin/mechanisms',
+    idKey: 'mechanism_id',
+    nameKey: 'mechanism_name',
+    nameLabel: 'Механизм',
+  },
+}
+
 const initialData: AdminData = {
   users: [],
   stores: [],
@@ -135,6 +178,11 @@ const initialData: AdminData = {
   watchModels: [],
   watchInstances: [],
   orders: [],
+}
+
+const emptySimpleForm: SimpleForm = {
+  name: '',
+  city: '',
 }
 
 async function fetchAdminResource<T>(path: string): Promise<T[]> {
@@ -152,6 +200,29 @@ async function fetchAdminResource<T>(path: string): Promise<T[]> {
   }
 
   return response.json() as Promise<T[]>
+}
+
+async function mutateAdminResource(path: string, init: RequestInit) {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+  })
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Нет доступа')
+  }
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => null)
+    throw new Error(result?.error || 'Не удалось сохранить изменения')
+  }
+}
+
+function isSimpleTab(tab: AdminTab): tab is SimpleTab {
+  return tab === 'stores' || tab === 'brands' || tab === 'categories' || tab === 'mechanisms'
 }
 
 function getRemovedBadge(removed: boolean) {
@@ -194,67 +265,65 @@ export function AdminDashboard() {
   const [data, setData] = useState<AdminData>(initialData)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [form, setForm] = useState<SimpleForm>(emptySimpleForm)
+  const [editingId, setEditingId] = useState<string | number | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
+  const loadAdminData = async () => {
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const [
+        users,
+        stores,
+        brands,
+        categories,
+        mechanisms,
+        watchModels,
+        watchInstances,
+        orders,
+      ] = await Promise.all([
+        fetchAdminResource<AdminUser>('/api/admin/users'),
+        fetchAdminResource<AdminStore>('/api/admin/stores'),
+        fetchAdminResource<AdminBrand>('/api/admin/brands'),
+        fetchAdminResource<AdminCategory>('/api/admin/categories'),
+        fetchAdminResource<AdminMechanism>('/api/admin/mechanisms'),
+        fetchAdminResource<AdminWatchModel>('/api/admin/watch-models'),
+        fetchAdminResource<AdminWatchInstance>('/api/admin/watch-instances'),
+        fetchAdminResource<AdminOrder>('/api/admin/orders'),
+      ])
+
+      setData({
+        users,
+        stores,
+        brands,
+        categories,
+        mechanisms,
+        watchModels,
+        watchInstances,
+        orders,
+      })
+    } catch (loadError) {
+      setData(initialData)
+      setError(loadError instanceof Error && loadError.message === 'NO_ACCESS'
+        ? 'Нет доступа'
+        : 'Не удалось загрузить данные админки')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let isMounted = true
-
-    async function loadAdminData() {
-      setIsLoading(true)
-      setError('')
-
-      try {
-        const [
-          users,
-          stores,
-          brands,
-          categories,
-          mechanisms,
-          watchModels,
-          watchInstances,
-          orders,
-        ] = await Promise.all([
-          fetchAdminResource<AdminUser>('/api/admin/users'),
-          fetchAdminResource<AdminStore>('/api/admin/stores'),
-          fetchAdminResource<AdminBrand>('/api/admin/brands'),
-          fetchAdminResource<AdminCategory>('/api/admin/categories'),
-          fetchAdminResource<AdminMechanism>('/api/admin/mechanisms'),
-          fetchAdminResource<AdminWatchModel>('/api/admin/watch-models'),
-          fetchAdminResource<AdminWatchInstance>('/api/admin/watch-instances'),
-          fetchAdminResource<AdminOrder>('/api/admin/orders'),
-        ])
-
-        if (isMounted) {
-          setData({
-            users,
-            stores,
-            brands,
-            categories,
-            mechanisms,
-            watchModels,
-            watchInstances,
-            orders,
-          })
-        }
-      } catch (loadError) {
-        if (isMounted) {
-          setData(initialData)
-          setError(loadError instanceof Error && loadError.message === 'NO_ACCESS'
-            ? 'Нет доступа'
-            : 'Не удалось загрузить данные админки')
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
     loadAdminData()
-
-    return () => {
-      isMounted = false
-    }
   }, [])
+
+  useEffect(() => {
+    setForm(emptySimpleForm)
+    setEditingId(null)
+    setActionError('')
+  }, [activeTab])
 
   const counts = {
     users: data.users.length,
@@ -273,6 +342,90 @@ export function AdminDashboard() {
     watchInstances: data.watchInstances.filter(row => matchesSearch(row, search)),
     orders: data.orders.filter(row => matchesSearch(row, search)),
   }), [data, search])
+
+  const handleSimpleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!isSimpleTab(activeTab)) {
+      return
+    }
+
+    const config = simpleResourceConfigs[activeTab]
+    const name = form.name.trim()
+    const city = form.city.trim()
+
+    if (!name || (config.hasCity && !city)) {
+      setActionError('Заполните обязательные поля')
+      return
+    }
+
+    const body = config.hasCity
+      ? { [config.nameKey]: name, city }
+      : { [config.nameKey]: name }
+
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      if (editingId) {
+        await mutateAdminResource(`${config.endpoint}/${editingId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        })
+      } else {
+        await mutateAdminResource(config.endpoint, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+      }
+
+      setForm(emptySimpleForm)
+      setEditingId(null)
+      await loadAdminData()
+    } catch (saveError) {
+      setActionError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить изменения')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const startEditSimpleRow = (row: Record<string, unknown>, config: SimpleResourceConfig) => {
+    setEditingId(row[config.idKey] as string | number)
+    setForm({
+      name: String(row[config.nameKey] ?? ''),
+      city: config.hasCity ? String(row.city ?? '') : '',
+    })
+    setActionError('')
+  }
+
+  const handleDeleteSimpleRow = async (id: string | number) => {
+    if (!isSimpleTab(activeTab)) {
+      return
+    }
+
+    const confirmed = window.confirm('Пометить запись как удаленную?')
+
+    if (!confirmed) {
+      return
+    }
+
+    const config = simpleResourceConfigs[activeTab]
+    setIsSaving(true)
+    setActionError('')
+
+    try {
+      await mutateAdminResource(`${config.endpoint}/${id}`, {
+        method: 'DELETE',
+      })
+      await loadAdminData()
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить запись')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const simpleConfig = isSimpleTab(activeTab) ? simpleResourceConfigs[activeTab] : null
 
   return (
     <div className="space-y-6">
@@ -320,6 +473,46 @@ export function AdminDashboard() {
         ))}
       </div>
 
+      {simpleConfig && (
+        <form onSubmit={handleSimpleSubmit} className="rounded-lg border border-border/50 p-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input
+              placeholder={simpleConfig.nameLabel}
+              value={form.name}
+              onChange={event => setForm(prev => ({ ...prev, name: event.target.value }))}
+            />
+            {simpleConfig.hasCity && (
+              <Input
+                placeholder="Город"
+                value={form.city}
+                onChange={event => setForm(prev => ({ ...prev, city: event.target.value }))}
+              />
+            )}
+            <div className="flex gap-2">
+              <Button type="submit" disabled={isSaving}>
+                {editingId ? 'Сохранить' : 'Добавить'}
+              </Button>
+              {editingId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingId(null)
+                    setForm(emptySimpleForm)
+                    setActionError('')
+                  }}
+                >
+                  Отмена
+                </Button>
+              )}
+            </div>
+          </div>
+          {actionError && (
+            <p className="text-sm text-destructive">{actionError}</p>
+          )}
+        </form>
+      )}
+
       {error && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -333,10 +526,41 @@ export function AdminDashboard() {
       ) : (
         <div className="border rounded-lg overflow-hidden">
           {activeTab === 'users' && <UsersTable rows={filteredData.users} />}
-          {activeTab === 'stores' && <StoresTable rows={filteredData.stores} />}
-          {activeTab === 'brands' && <BrandsTable rows={filteredData.brands} />}
-          {activeTab === 'categories' && <CategoriesTable rows={filteredData.categories} />}
-          {activeTab === 'mechanisms' && <MechanismsTable rows={filteredData.mechanisms} />}
+          {activeTab === 'stores' && (
+            <StoresTable
+              rows={filteredData.stores}
+              onEdit={row => startEditSimpleRow(row as unknown as Record<string, unknown>, simpleResourceConfigs.stores)}
+              onDelete={handleDeleteSimpleRow}
+              disabled={isSaving}
+            />
+          )}
+          {activeTab === 'brands' && (
+            <SimpleDictionaryTable
+              rows={filteredData.brands as Array<Record<string, unknown> & { removed: boolean }>}
+              config={simpleResourceConfigs.brands}
+              onEdit={row => startEditSimpleRow(row as unknown as Record<string, unknown>, simpleResourceConfigs.brands)}
+              onDelete={handleDeleteSimpleRow}
+              disabled={isSaving}
+            />
+          )}
+          {activeTab === 'categories' && (
+            <SimpleDictionaryTable
+              rows={filteredData.categories as Array<Record<string, unknown> & { removed: boolean }>}
+              config={simpleResourceConfigs.categories}
+              onEdit={row => startEditSimpleRow(row as unknown as Record<string, unknown>, simpleResourceConfigs.categories)}
+              onDelete={handleDeleteSimpleRow}
+              disabled={isSaving}
+            />
+          )}
+          {activeTab === 'mechanisms' && (
+            <SimpleDictionaryTable
+              rows={filteredData.mechanisms as Array<Record<string, unknown> & { removed: boolean }>}
+              config={simpleResourceConfigs.mechanisms}
+              onEdit={row => startEditSimpleRow(row as unknown as Record<string, unknown>, simpleResourceConfigs.mechanisms)}
+              onDelete={handleDeleteSimpleRow}
+              disabled={isSaving}
+            />
+          )}
           {activeTab === 'watchModels' && <WatchModelsTable rows={filteredData.watchModels} />}
           {activeTab === 'watchInstances' && <WatchInstancesTable rows={filteredData.watchInstances} />}
           {activeTab === 'orders' && <OrdersTable rows={filteredData.orders} />}
@@ -383,7 +607,17 @@ function UsersTable({ rows }: { rows: AdminUser[] }) {
   )
 }
 
-function StoresTable({ rows }: { rows: AdminStore[] }) {
+function StoresTable({
+  rows,
+  onEdit,
+  onDelete,
+  disabled,
+}: {
+  rows: AdminStore[]
+  onEdit: (row: AdminStore) => void
+  onDelete: (id: string | number) => void
+  disabled: boolean
+}) {
   return (
     <Table>
       <TableHeader>
@@ -392,15 +626,25 @@ function StoresTable({ rows }: { rows: AdminStore[] }) {
           <TableHead>Магазин</TableHead>
           <TableHead>Город</TableHead>
           <TableHead className="text-center">Статус</TableHead>
+          <TableHead className="text-right">Действия</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length === 0 ? <EmptyRow colSpan={4} /> : rows.map(row => (
+        {rows.length === 0 ? <EmptyRow colSpan={5} /> : rows.map(row => (
           <TableRow key={String(row.store_id)}>
             <TableCell className="font-mono text-xs">{row.store_id}</TableCell>
             <TableCell className="font-medium">{row.store_name}</TableCell>
             <TableCell>{row.city}</TableCell>
             <TableCell className="text-center">{getRemovedBadge(row.removed)}</TableCell>
+            <TableCell className="text-right">
+              <RowActions
+                id={row.store_id}
+                removed={row.removed}
+                disabled={disabled}
+                onEdit={() => onEdit(row)}
+                onDelete={onDelete}
+              />
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -408,69 +652,77 @@ function StoresTable({ rows }: { rows: AdminStore[] }) {
   )
 }
 
-function BrandsTable({ rows }: { rows: AdminBrand[] }) {
-  return (
-    <SimpleDictionaryTable
-      rows={rows}
-      idKey="brand_id"
-      nameKey="brand_name"
-      nameLabel="Бренд"
-    />
-  )
-}
-
-function CategoriesTable({ rows }: { rows: AdminCategory[] }) {
-  return (
-    <SimpleDictionaryTable
-      rows={rows}
-      idKey="category_id"
-      nameKey="category_name"
-      nameLabel="Категория"
-    />
-  )
-}
-
-function MechanismsTable({ rows }: { rows: AdminMechanism[] }) {
-  return (
-    <SimpleDictionaryTable
-      rows={rows}
-      idKey="mechanism_id"
-      nameKey="mechanism_name"
-      nameLabel="Механизм"
-    />
-  )
-}
-
-function SimpleDictionaryTable<T extends { removed: boolean }>({
+function SimpleDictionaryTable({
   rows,
-  idKey,
-  nameKey,
-  nameLabel,
+  config,
+  onEdit,
+  onDelete,
+  disabled,
 }: {
-  rows: T[]
-  idKey: keyof T
-  nameKey: keyof T
-  nameLabel: string
+  rows: Array<Record<string, unknown> & { removed: boolean }>
+  config: SimpleResourceConfig
+  onEdit: (row: Record<string, unknown> & { removed: boolean }) => void
+  onDelete: (id: string | number) => void
+  disabled: boolean
 }) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>ID</TableHead>
-          <TableHead>{nameLabel}</TableHead>
+          <TableHead>{config.nameLabel}</TableHead>
           <TableHead className="text-center">Статус</TableHead>
+          <TableHead className="text-right">Действия</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length === 0 ? <EmptyRow colSpan={3} /> : rows.map(row => (
-          <TableRow key={String(row[idKey])}>
-            <TableCell className="font-mono text-xs">{String(row[idKey])}</TableCell>
-            <TableCell className="font-medium">{String(row[nameKey])}</TableCell>
-            <TableCell className="text-center">{getRemovedBadge(row.removed)}</TableCell>
-          </TableRow>
-        ))}
+        {rows.length === 0 ? <EmptyRow colSpan={4} /> : rows.map(row => {
+          const id = row[config.idKey] as string | number
+
+          return (
+            <TableRow key={String(id)}>
+              <TableCell className="font-mono text-xs">{String(id)}</TableCell>
+              <TableCell className="font-medium">{String(row[config.nameKey])}</TableCell>
+              <TableCell className="text-center">{getRemovedBadge(row.removed)}</TableCell>
+              <TableCell className="text-right">
+                <RowActions
+                  id={id}
+                  removed={row.removed}
+                  disabled={disabled}
+                  onEdit={() => onEdit(row)}
+                  onDelete={onDelete}
+                />
+              </TableCell>
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
+  )
+}
+
+function RowActions({
+  id,
+  removed,
+  disabled,
+  onEdit,
+  onDelete,
+}: {
+  id: string | number
+  removed: boolean
+  disabled: boolean
+  onEdit: () => void
+  onDelete: (id: string | number) => void
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <Button variant="ghost" size="sm" onClick={onEdit} disabled={disabled || removed}>
+        Редактировать
+      </Button>
+      <Button variant="destructive" size="sm" onClick={() => onDelete(id)} disabled={disabled || removed}>
+        Удалить
+      </Button>
+    </div>
   )
 }
 
