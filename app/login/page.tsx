@@ -25,13 +25,10 @@ export default function LoginPage() {
     setError('')
     setIsLoading(true)
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    const success = login(email, password)
+    const success = await login(email, password)
     
     if (success) {
-      router.push('/admin')
+      router.push('/profile')
     } else {
       setError('Неверный email или пароль')
     }
@@ -95,6 +92,7 @@ export default function LoginPage() {
               <div className="text-center text-sm text-muted-foreground">
                 <p>Демо-доступ:</p>
                 <p className="font-mono text-xs mt-1">admin@timelux.ru / admin123</p>
+                <p className="font-mono text-xs mt-1">user@timelux.ru / user123</p>
               </div>
             </form>
 

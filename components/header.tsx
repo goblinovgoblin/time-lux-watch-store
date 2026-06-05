@@ -10,6 +10,12 @@ import { useState } from 'react'
 export function Header() {
   const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const isAdmin = user?.role_name === 'ADMIN'
+
+  const handleLogout = () => {
+    logout()
+    setOpen(false)
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -20,31 +26,32 @@ export function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
-          <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Главная
-          </Link>
           <Link href="/catalog" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             Каталог
           </Link>
-          <Link href="/catalog?category=luxury" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Люкс
-          </Link>
-          <Link href="/catalog?category=sport" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Спорт
-          </Link>
+          {user && (
+            <Link href="/profile" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Профиль
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/admin" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Админка
+            </Link>
+          )}
         </nav>
 
         <div className="hidden md:flex items-center gap-4">
           {user ? (
             <>
-              {user.role === 'admin' && (
+              {isAdmin && (
                 <Link href="/admin">
                   <Button variant="outline" size="sm">
                     Админ-панель
                   </Button>
                 </Link>
               )}
-              <Button variant="ghost" size="sm" onClick={logout}>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
                 Выйти
               </Button>
             </>
@@ -66,29 +73,30 @@ export function Header() {
           </SheetTrigger>
           <SheetContent side="right" className="w-[280px]">
             <nav className="flex flex-col gap-4 mt-8">
-              <Link href="/" onClick={() => setOpen(false)} className="text-lg font-medium">
-                Главная
-              </Link>
               <Link href="/catalog" onClick={() => setOpen(false)} className="text-lg font-medium">
                 Каталог
               </Link>
-              <Link href="/catalog?category=luxury" onClick={() => setOpen(false)} className="text-lg font-medium">
-                Люкс
-              </Link>
-              <Link href="/catalog?category=sport" onClick={() => setOpen(false)} className="text-lg font-medium">
-                Спорт
-              </Link>
+              {user && (
+                <Link href="/profile" onClick={() => setOpen(false)} className="text-lg font-medium">
+                  Профиль
+                </Link>
+              )}
+              {isAdmin && (
+                <Link href="/admin" onClick={() => setOpen(false)} className="text-lg font-medium">
+                  Админка
+                </Link>
+              )}
               <div className="border-t pt-4 mt-4">
                 {user ? (
                   <>
-                    {user.role === 'admin' && (
+                    {isAdmin && (
                       <Link href="/admin" onClick={() => setOpen(false)}>
                         <Button variant="outline" className="w-full mb-2">
                           Админ-панель
                         </Button>
                       </Link>
                     )}
-                    <Button variant="ghost" className="w-full" onClick={() => { logout(); setOpen(false); }}>
+                    <Button variant="ghost" className="w-full" onClick={handleLogout}>
                       Выйти
                     </Button>
                   </>

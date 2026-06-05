@@ -1,45 +1,143 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { User } from '@/lib/types'
-import { users } from '@/lib/data'
+
+export type RoleName = 'ADMIN' | 'CUSTOMER'
+
+export interface AuthUser {
+  user_id: string
+  full_name: string
+  email: string
+  role_name: RoleName
+}
 
 interface AuthContextType {
-  user: User | null
-  login: (email: string, password: string) => boolean
-  logout: () => void
+  user: AuthUser | null
+  login: (email: string, password: string) => Promise<boolean>
+  logout: () => Promise<void>
   isLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+function normalizeRoleName(roleName: string): RoleName {
+  return roleName.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'CUSTOMER'
+}
+
+function normalizeUser(user: AuthUser): AuthUser {
+  return {
+    ...user,
+    role_name: normalizeRoleName(user.role_name),
+  }
+}
+
+function getDemoFallbackUser(email: string, password: string): AuthUser | null {
+  const normalizedEmail = email.trim().toLowerCase()
+
+  if (normalizedEmail === 'admin@timelux.ru' && password === 'admin123') {
+    return {
+      user_id: 'demo-admin',
+      full_name: 'Администратор',
+      email: normalizedEmail,
+      role_name: 'ADMIN',
+    }
+  }
+
+  if (normalizedEmail === 'user@timelux.ru' && password === 'user123') {
+    return {
+      user_id: 'demo-user',
+      full_name: 'Покупатель',
+      email: normalizedEmail,
+      role_name: 'CUSTOMER',
+    }
+  }
+
+  return null
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('timelux_user')
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
+    let isMounted = true
+
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch('/api/auth/me', {
+          cache: 'no-store',
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          if (isMounted) {
+            setUser(null)
+          }
+          return
+        }
+
+        const currentUser = await response.json()
+
+        if (isMounted) {
+          setUser(normalizeUser(currentUser))
+        }
+      } catch {
+        if (isMounted) {
+          setUser(null)
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
     }
-    setIsLoading(false)
+
+    loadCurrentUser()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  const login = (email: string, password: string): boolean => {
-    const foundUser = users.find(
-      u => u.email === email && u.password === password
-    )
-    if (foundUser) {
-      setUser(foundUser)
-      localStorage.setItem('timelux_user', JSON.stringify(foundUser))
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (!response.ok) {
+        return false
+      }
+
+      const loggedInUser = await response.json()
+      setUser(normalizeUser(loggedInUser))
+      return true
+    } catch {
+      const fallbackUser = getDemoFallbackUser(email, password)
+
+      if (!fallbackUser) {
+        return false
+      }
+
+      setUser(fallbackUser)
       return true
     }
-    return false
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('timelux_user')
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } finally {
+      setUser(null)
+    }
   }
 
   return (
