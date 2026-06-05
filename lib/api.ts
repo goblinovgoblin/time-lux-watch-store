@@ -28,6 +28,22 @@ export interface CatalogWatch {
   image_url: string | null
 }
 
+export interface CustomerOrderHistoryRow {
+  order_id: string | number
+  order_date: string
+  order_status: string
+  total_amount: number | string
+  instance_id: string | number
+  brand_name: string
+  model_name: string
+  reference_code: string
+  serial_number: string
+  item_price: number | string
+  store_name: string
+  city: string
+  image_url: string | null
+}
+
 function appendParam(
   params: URLSearchParams,
   name: string,
@@ -116,6 +132,19 @@ export async function createOrder(instanceId: number | string) {
     success: true
     order_id: string | number
   }
+}
+
+export async function getCustomerOrders() {
+  const response = await fetch('/api/profile/orders', {
+    cache: 'no-store',
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to load customer orders')
+  }
+
+  return response.json() as Promise<CustomerOrderHistoryRow[]>
 }
 
 export function getMockWatchById(id: string) {
