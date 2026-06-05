@@ -96,6 +96,28 @@ export async function getWatchById(id: string) {
   return response.json() as Promise<CatalogWatch>
 }
 
+export async function createOrder(instanceId: number | string) {
+  const response = await fetch('/api/orders', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ instanceId: Number(instanceId) }),
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    throw new Error(result.message || 'Не удалось оформить заказ')
+  }
+
+  return result as {
+    success: true
+    order_id: string | number
+  }
+}
+
 export function getMockWatchById(id: string) {
   return mockCatalogWatches.find(watch => watch.instance_id === id)
 }

@@ -1,10 +1,12 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { CatalogWatch } from '@/lib/api'
-import { getMockWatchById, getWatchById } from '@/lib/api'
+import { createOrder, getMockWatchById, getWatchById } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
@@ -14,52 +16,94 @@ import { formatPrice } from '@/lib/data'
 import { ArrowLeft, Shield, Truck, RotateCcw, Phone } from 'lucide-react'
 
 function isAvailable(status: string) {
-  return ['available', 'in_stock', 'active'].includes(status.toLowerCase())
+  return status.toUpperCase() === 'AVAILABLE'
 }
 
 export default function WatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
+  const { user } = useAuth()
   const [watch, setWatch] = useState<CatalogWatch | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isOrdering, setIsOrdering] = useState(false)
   const [error, setError] = useState('')
+  const [orderMessage, setOrderMessage] = useState('')
+  const [orderError, setOrderError] = useState('')
 
-  useEffect(() => {
-    let isMounted = true
+  const loadWatch = useCallback(async () => {
+    setIsLoading(true)
+    setError('')
 
-    async function loadWatch() {
-      setIsLoading(true)
-      setError('')
-
-      try {
-        const catalogWatch = await getWatchById(id)
-
-        if (isMounted) {
-          setWatch(catalogWatch)
-        }
-      } catch {
-        const fallbackWatch = getMockWatchById(id)
-
-        if (isMounted) {
-          setWatch(fallbackWatch ?? null)
-          setError(
-            fallbackWatch
-              ? 'Не удалось загрузить часы из базы. Показаны демо-данные.'
-              : 'Не удалось загрузить данные о часах.'
-          )
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadWatch()
-
-    return () => {
-      isMounted = false
+    try {
+      const catalogWatch = await getWatchById(id)
+      setWatch(catalogWatch)
+    } catch {
+      const fallbackWatch = getMockWatchById(id)
+      setWatch(fallbackWatch ?? null)
+      setError(
+        fallbackWatch
+          ? 'Не удалось загрузить часы из базы. Показаны демо-данные.'
+          : 'Не удалось загрузить данные о часах.'
+      )
+    } finally {
+      setIsLoading(false)
     }
   }, [id])
+
+  useEffect(() => {
+    loadWatch()
+  }, [loadWatch])
+
+  const handleCreateOrder = async () => {
+    if (!watch) {
+      return
+    }
+
+    setOrderMessage('')
+    setOrderError('')
+
+    if (!user) {
+      setOrderError('Войдите, чтобы оформить заказ')
+      router.push('/login')
+      return
+    }
+
+    if (!isAvailable(watch.status)) {
+      setOrderError('Эти часы уже недоступны для заказа')
+      return
+    }
+
+    const confirmed = window.confirm('Оформить заказ на эти часы?')
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsOrdering(true)
+
+    try {
+      await createOrder(watch.instance_id)
+      setOrderMessage('Заказ оформлен')
+
+      try {
+        const refreshedWatch = await getWatchById(id)
+        setWatch(refreshedWatch)
+      } catch {
+        setWatch({
+          ...watch,
+          status: 'RESERVED',
+        })
+      }
+    } catch (orderCreateError) {
+      setOrderError(
+        orderCreateError instanceof Error
+          ? orderCreateError.message
+          : 'Не удалось оформить заказ'
+      )
+    } finally {
+      setIsOrdering(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -186,14 +230,36 @@ export default function WatchPage({ params }: { params: Promise<{ id: string }> 
 
               <Separator />
 
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" className="flex-1" disabled={!available}>
-                  {available ? 'Оформить заказ' : 'Нет в наличии'}
-                </Button>
-                <Button size="lg" variant="outline" className="gap-2">
-                  <Phone className="h-4 w-4" />
-                  Связаться с нами
-                </Button>
+              <div className="space-y-4">
+                {orderMessage && (
+                  <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-700">
+                    <p className="font-medium">{orderMessage}</p>
+                    <Link href="/profile" className="underline underline-offset-4">
+                      Перейти в профиль
+                    </Link>
+                  </div>
+                )}
+
+                {orderError && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {orderError}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button
+                    size="lg"
+                    className="flex-1"
+                    disabled={!available || isOrdering}
+                    onClick={handleCreateOrder}
+                  >
+                    {isOrdering ? 'Оформление...' : available ? 'Оформить заказ' : 'Нет в наличии'}
+                  </Button>
+                  <Button size="lg" variant="outline" className="gap-2">
+                    <Phone className="h-4 w-4" />
+                    Связаться с нами
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
